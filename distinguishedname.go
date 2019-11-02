@@ -2,6 +2,7 @@ package gopki
 
 import (
 	"errors"
+	"strings"
 )
 
 /*
@@ -21,6 +22,8 @@ STREET	streetAddress	2.5.4.9
 T or TITLE	title	2.5.4.12
 UID	userID	0.9.2342.19200300.100.1.1
 
+Parsing is according to the RFC 1779, though probably we will have deviate from it in the real world
+Experience will tell ;-)
 */
 
 /*
@@ -60,12 +63,29 @@ func isHex(data string) (b bool) {
    <pair> ::= "\" ( <special> | "\" | '"')
  */
 func isPair(data string) (b bool) {
-	if len(data) > 0 &&
+	if len(data) > 1 &&
 		data[0] == '\\' &&
-		isSpecial(data[1:]) {
+		(isSpecial(data[1:]) ||
+			data[1] == '\\' ||
+			data[1] == '"') {
 		return true
 	}
 	return false
+}
+
+/*
+   <pair> ::= "\" ( <special> | "\" | '"')
+*/
+func getPair(data string) (s string, err error) {
+	if len(data) > 1 &&
+		data[0] == '\\' &&
+		(isSpecial(data[1:]) ||
+			data[1] == '\\' ||
+			data[1] == '"') {
+		res := data[0:2]
+		return res, nil
+	}
+	return "", errors.New("No a valid pair")
 }
 
 /*
@@ -99,11 +119,11 @@ func getDigitString(data string) (s string, w int) {
 	digit := ""
 	width := 0
 
-	for i := 0; i < len(data); i++ {
-		if !isDigit(data[i:]) {
+	for ; width < len(data); {
+		if !isDigit(data[width:]) {
 			break
 		}
-		digit += data[i:(i+1)]
+		digit += data[width:(width+1)]
 		width++
 	}
 
@@ -120,48 +140,71 @@ func getString(data string) (s string, w int, err error) {
 	width := 0
 
 	if data[0] == '"' {
-		for i := 0; i < len(data); i += 1 {
-			if !(isStringChar(data[i:]) ||
-				 isSpecial(data[i:]) ||
-				 isPair(data[i:])) {
+		res += data[0:1]
+		width++
+		for ; width < len(data); {
+			// end quote (TODO set after for loop)
+			if data[width] == '"' {
+				res += data[width:(width+1)]
+				width++
 				break
 			}
-			res += data[i:(i+1)]
-			width++
+			// special and stringchar (1 char only)
+			if isStringChar(data[width:]) ||
+				isSpecial(data[width:]) {
+				res += data[width:(width+1)]
+				width++
+				continue
+			}
+			// pair (2 characters)
+			if isPair(data[width:]) {
+				tmp, _ := getPair(data[width:])
+				res += tmp
+				width += 2
+				continue
+			}
+			// something wrong
+			break
 		}
-		if  len(data) == width ||
-			data[width] != '"' {
+
+		if data[width-1] != '"' {
 			return res, width, errors.New("missing qoute")
 		}
 
+		return res, width, nil
+	}
+
+	// Hex code
+	if data[0] == '#' {
 		res += data[width:(width+1)]
 		width++
-
-		return res, width, nil
-	}
-
-	if data[0] == '#' {
-		for i := 0; i < len(data); i += 1 {
-			if !(data[0] == '#' ||
-				isHex(data)) {
+		for ; width < len(data); {
+			if ! isHex(data[width:]) {
 				break
 			}
-			res += data[i:(i+1)]
+			res += data[width:(width+1)]
 			width++
 		}
-		if len(data) == 1 {
-			return res, width, errors.New("missing hexadecimal number")
+		if len(res) == 1 {
+			return res, width, errors.New("missing hex number")
 		}
 		return res, width, nil
 	}
 
-	for i := 0; i < len(data); i += 1 {
-		if !(isStringChar(data[i:]) ||
-			 isPair(data[i:])) {
+	// Normal string
+	for ; width < len(data); {
+		if !(isStringChar(data[width:]) ||
+			 isPair(data[width:])) {
 			break
 		}
+		res += data[width:(width+1)]
 		width++
 	}
+	// remove the trailing space, but keep width
+	res = strings.TrimRight(res, " ")
+	width = len(res)
+	// remove the leading space, normally remove by optional spaces
+	res = strings.TrimLeft(res, " ")
 
 	return res, width, nil
 }
@@ -169,22 +212,23 @@ func getString(data string) (s string, w int, err error) {
 /*
 <oid> ::= <digitstring> | <digitstring> "." <oid>
 */
-func getOId(oid string) (s string, w int, err error) {
+func getOID(oid string) (s string, w int, err error) {
 
 	res, width := getDigitString(oid)
 	if width == 0 {
-		return "", 0, errors.New("No oid")
+		return "", 0, errors.New("no oid")
 	}
-	for i, w := 0, 0; i < len(oid[width:]); i += w {
-		if oid[i] == '.' {
-			nb, wl := getDigitString(oid)
-			if wl == 0 {
-				return "", 0, errors.New("missing OID number")
-			}
-			res = res + "." + nb
-			w += wl + 1
+	for ; width < len(oid); {
+		if oid[width] != '.' {
+			break
 		}
-		width += w
+		width++
+		nb, wl := getDigitString(oid[width:])
+		if wl == 0 {
+			return "", 0, errors.New("missing number")
+		}
+		res = res + "." + nb
+		width += wl
 	}
 
 	return res, width, nil
@@ -209,11 +253,11 @@ func getKey(data string) (s string, w int, err error) {
 	res := ""
 	width := 0
 
-	for i:=0; i<len(data); i++ {
-		if !isKeyChar(data[i:]) {
+	for ; width <len(data); {
+		if !isKeyChar(data[width:]) {
 			break
 		}
-		res += data[i:(i+1)]
+		res += data[width:(width+1)]
 		width++
 	}
 
@@ -221,12 +265,16 @@ func getKey(data string) (s string, w int, err error) {
 		return "", 0, errors.New("not an attribute key")
 	}
 
-	if width > 4 &&
-		(res[0:4] == "OID." ||
-		res[0:4] == "oid." ) {
-		_, _, err := getOId(res[4:])
-		if err != nil {
-			return "", 0, errors.New("not a valid attribute key: invalid OID")
+	if width == 3 &&
+		(res == "OID" ||
+		res == "oid" ) {
+		if width < len(data) && data[width] == '.' {
+			tmp, wl, err := getOID(data[4:])
+			if err != nil {
+				return "", 0, errors.New("not a valid attribute key: invalid OID")
+			}
+			res = res + "." + tmp
+			width = width + 1 + wl
 		}
 	}
 	return res, width, nil
@@ -298,15 +346,15 @@ func getAttribute(data string) (attr *Attribute, w int, err error) {
 | <attribute> <optional-space> "+"
 <optional-space> <name-component>
 */
-func nameComponent(data string) (attrs *Attribute, width int, err error) {
+func getNameComponent(data string) (attrs *Attribute, width int, err error) {
 
 	attr, width, err := getAttribute(data)
 	if err != nil {
 		return nil, 0, errors.New("nameComponent failed: " + err.Error())
 	}
 	attrN := &(attr.next)
-	for i, w := 0, 0; i < len(data[width:]); i = w {
-		ws := optionalSpaces(data[i:])
+	for ; width < len(data); {
+		ws := optionalSpaces(data[width:])
 		width += ws
 		if (len(data) > width) &&
 			(data[width] != '+') {
@@ -325,7 +373,6 @@ func nameComponent(data string) (attrs *Attribute, width int, err error) {
 		width += wl
 		*attrN = tmpAttr
 		attrN = &(tmpAttr.next)
-		w = width
 	}
 
 	return attr, width, nil
@@ -354,12 +401,12 @@ func ParseDistinguishedName(data string) (attr []*Attribute, err error){
 	res := make([]*Attribute, 1)
 	width := 0
 
-	res[0], width, err = nameComponent(data)
+	res[0], width, err = getNameComponent(data)
 	if err != nil {
 		return nil, errors.New("parseDistinguishedName failed: " + err.Error())
 	}
 
-	for i, w := 0, 0; i < len(data[width:]); i = w {
+	for ; width < len(data); {
 		ws, err := spacedSeperator(data[width:])
 		if err != nil {
 			return nil, errors.New("parseDistinguishedName failed: " + err.Error())
@@ -368,13 +415,12 @@ func ParseDistinguishedName(data string) (attr []*Attribute, err error){
 		if len(data) == width {
 			break
 		}
-		tmpRes, ws, err := nameComponent(data[width:])
+		tmpRes, ws, err := getNameComponent(data[width:])
 		if err != nil {
 			return nil, errors.New("parseDistinguishedName failed: " + err.Error())
 		}
 		res = append(res, tmpRes)
 		width += ws
-		w = width
 	}
 
 	return res, nil
