@@ -42,6 +42,16 @@ func NewCA(dn string, years int, pub crypto.PublicKey, priv crypto.PrivateKey) (
 	return &CA{priv,caTmp, certif, big.NewInt(1)}, nil
 }
 
+func LoadCA(cacert []byte, priv crypto.PrivateKey, serialNumber big.Int) (c *CA, e error) {
+
+	certif, err := x509.ParseCertificate(cacert)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CA{priv, cacert, certif, &serialNumber}, nil
+}
+
 func (ca *CA)createTLSCertificate(dn string, pub crypto.PublicKey, extKeyUsage []x509.ExtKeyUsage) (cert []byte, err error) {
 
 	pkixName, err := ConvertDNToPKIXName(dn)
