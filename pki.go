@@ -4,7 +4,6 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"math/big"
 	"time"
 )
@@ -16,10 +15,16 @@ type CA struct {
 	certificateSerialNumber *big.Int
 }
 
-func NewCA(dn pkix.Name, years int, pub crypto.PublicKey, priv crypto.PrivateKey) (ca *CA, err error){
+func NewCA(dn string, years int, pub crypto.PublicKey, priv crypto.PrivateKey) (c *CA, e error) {
+
+	pkixName, err := ConvertDNToPKIXName(dn)
+	if err != nil {
+		return nil, err
+	}
+
 	caTemplate := x509.Certificate{
 		SerialNumber:                big.NewInt(2019),
-		Subject:                     dn,
+		Subject:                     *pkixName,
 		NotBefore:                   time.Now(),
 		NotAfter:                    time.Now().AddDate(years,0,0),
 		KeyUsage:                    x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
@@ -37,10 +42,16 @@ func NewCA(dn pkix.Name, years int, pub crypto.PublicKey, priv crypto.PrivateKey
 	return &CA{priv,caTmp, certif, big.NewInt(1)}, nil
 }
 
-func (ca *CA)createTLSCertificate(dn pkix.Name, pub crypto.PublicKey, extKeyUsage []x509.ExtKeyUsage) (cert []byte, err error) {
+func (ca *CA)createTLSCertificate(dn string, pub crypto.PublicKey, extKeyUsage []x509.ExtKeyUsage) (cert []byte, err error) {
+
+	pkixName, err := ConvertDNToPKIXName(dn)
+	if err != nil {
+		return nil, err
+	}
+
 	certTemplate := x509.Certificate{
 		SerialNumber:                ca.certificateSerialNumber,
-		Subject:                     dn,
+		Subject:                     *pkixName,
 		NotBefore:                   time.Now(),
 		NotAfter:                    time.Now().AddDate(1,0,0),
 		KeyUsage:                    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
@@ -54,10 +65,10 @@ func (ca *CA)createTLSCertificate(dn pkix.Name, pub crypto.PublicKey, extKeyUsag
 	return x509.CreateCertificate(rand.Reader, &certTemplate, ca.Certificate, pub, ca.priv)
 }
 
-func (ca *CA)CreateTLSClientCertificate(dn pkix.Name, pub crypto.PublicKey) (cert []byte, err error) {
+func (ca *CA)CreateTLSClientCertificate(dn string, pub crypto.PublicKey) (cert []byte, err error) {
 	return ca.createTLSCertificate(dn, pub, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 }
 
-func (ca *CA)CreateTLSServerCertificate(dn pkix.Name, pub crypto.PublicKey) (cert []byte, err error) {
+func (ca *CA)CreateTLSServerCertificate(dn string, pub crypto.PublicKey) (cert []byte, err error) {
 	return ca.createTLSCertificate(dn, pub, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
 }

@@ -1,6 +1,8 @@
 package gopki
 
 import (
+	"encoding/asn1"
+	"fmt"
 	"strconv"
 	"testing"
 )
@@ -566,6 +568,86 @@ func TestParseDistinguishedName(t *testing.T) {
 		res[2].value != "BE" ||
 		res[2].next != nil {
 		t.Error("ParseDistinguishedName: second value failed ")
+		return
+	}
+}
+
+func TestConvertStringToOID(t *testing.T) {
+	data := "OID.1.2.3.4"
+	oidRef := asn1.ObjectIdentifier{1,2,3,4}
+
+	oid, err := convertStringToOID(data)
+	if err != nil {
+		t.Error("convertStringToOID failed: " + err.Error())
+		return
+	}
+	if ! oidRef.Equal(oid) {
+		t.Error("convertStringToOID failed: oids not equal")
+		return
+	}
+}
+
+func TestConvertDNToPKIXName1(t *testing.T) {
+
+	pkixName, err := ConvertDNToPKIXName("CN=GOPKI , O=Cryptable , C=BE")
+	if err != nil {
+		t.Error("ConvertDNToPKIXName failed: " + err.Error())
+		return
+	}
+	if pkixName.CommonName != "GOPKI" {
+		t.Error("ConvertDNToPKIXName failed: common name " + pkixName.CommonName)
+		return
+	}
+	if pkixName.Organization[0] != "Cryptable" {
+		t.Error("ConvertDNToPKIXName failed: organization " + pkixName.Organization[0])
+		return
+	}
+	if pkixName.Country[0] != "BE" {
+		t.Error("ConvertDNToPKIXName failed: country " + pkixName.Country[0])
+		return
+	}
+}
+
+func TestConvertDNToPKIXName2(t *testing.T) {
+
+	pkixName, err := ConvertDNToPKIXName("CN=GOPKI , O=Cryptable , E=test@cryptable.org")
+	if err != nil {
+		t.Error("ConvertDNToPKIXName failed: " + err.Error())
+		return
+	}
+	if pkixName.CommonName != "GOPKI" {
+		t.Error("ConvertDNToPKIXName failed: common name " + pkixName.CommonName)
+		return
+	}
+	if pkixName.Organization[0] != "Cryptable" {
+		t.Error("ConvertDNToPKIXName failed: organization " + pkixName.Organization[0])
+		return
+	}
+	if pkixName.Names[0].Value != "test@cryptable.org" ||
+		! pkixName.Names[0].Type.Equal(EMAIL) {
+		t.Error("ConvertDNToPKIXName failed: " + fmt.Sprintf("%v", pkixName.Names[0].Value))
+		return
+	}
+}
+
+func TestConvertDNToPKIXName3(t *testing.T) {
+
+	pkixName, err := ConvertDNToPKIXName("CN=GOPKI , O=Cryptable , OID.1.2.3.4=custom")
+	if err != nil {
+		t.Error("ConvertDNToPKIXName failed: " + err.Error())
+		return
+	}
+	if pkixName.CommonName != "GOPKI" {
+		t.Error("ConvertDNToPKIXName failed: common name " + pkixName.CommonName)
+		return
+	}
+	if pkixName.Organization[0] != "Cryptable" {
+		t.Error("ConvertDNToPKIXName failed: organization " + pkixName.Organization[0])
+		return
+	}
+	if pkixName.Names[0].Value != "custom" ||
+		! pkixName.Names[0].Type.Equal(asn1.ObjectIdentifier{1,2,3,4}) {
+		t.Error("ConvertDNToPKIXName failed: " + fmt.Sprintf("%v", pkixName.Names[0].Value))
 		return
 	}
 }

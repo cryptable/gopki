@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
 	"os"
@@ -18,14 +17,9 @@ func TestNewCA(t *testing.T) {
 	// Arrange
 	rnd := rand.Reader
 	rsaKey, err := rsa.GenerateKey(rnd, 4096)
-	subject := pkix.Name{
-		CommonName:   "GoPKI",
-		Organization: []string{"Cryptable"},
-		Country:      []string{"BE"},
-	}
 
 	// Act
-	ca, err := NewCA(subject, 10, rsaKey.Public(), rsaKey)
+	ca, err := NewCA("CN=GoPKI,O=Cryptable,C=BE", 10, rsaKey.Public(), rsaKey)
 	if err != nil {
 		t.Error("NewCA() Failed", err)
 		return
@@ -62,13 +56,8 @@ func setup(t *testing.T) {
 	// Create a Test CA
 	rnd := rand.Reader
 	rsaKey, err := rsa.GenerateKey(rnd, 4096)
-	subject := pkix.Name{
-		CommonName:   "GoPKI",
-		Organization: []string{"Cryptable"},
-		Country:      []string{"BE"},
-	}
 
-	ca, err := NewCA(subject, 10, rsaKey.Public(), rsaKey)
+	ca, err := NewCA("CN=GoPKI,O=Cryptable,C=BE", 10, rsaKey.Public(), rsaKey)
 	if err != nil {
 		t.Error("NewCA() Failed", err)
 		panic(err)
@@ -104,14 +93,9 @@ func TestCA_CreateTLSClientCertificate(t *testing.T) {
 	// Arrange
 	rnd := rand.Reader
 	rsaKey, _ := rsa.GenerateKey(rnd, 2048)
-	subject := pkix.Name{
-		CommonName:   "SSL Client",
-		Organization: []string{"Cryptable"},
-		Country:      []string{"BE"},
-	}
 
 	// Act
-	cert, err := setupCA.CreateTLSClientCertificate(subject, rsaKey.Public())
+	cert, err := setupCA.CreateTLSClientCertificate("CN=SSL Server, O=Cryptable, C=BE", rsaKey.Public())
 
 	// Assert
 	if err != nil {
@@ -140,14 +124,9 @@ func TestCA_CreateTLSServerCertificate(t *testing.T) {
 	// Arrange
 	rnd := rand.Reader
 	rsaKey, _ := rsa.GenerateKey(rnd, 2048)
-	subject := pkix.Name{
-		CommonName:   "SSL Server",
-		Organization: []string{"Cryptable"},
-		Country:      []string{"BE"},
-	}
 
 	// Act
-	cert, err := setupCA.CreateTLSServerCertificate(subject, rsaKey.Public())
+	cert, err := setupCA.CreateTLSServerCertificate("CN=SSL Server, O=Cryptable, C=BE", rsaKey.Public())
 
 	// Assert
 	if err != nil {

@@ -1,27 +1,15 @@
 package gopki
 
 import (
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"errors"
+	"log"
+	"strconv"
 	"strings"
 )
 
 /*
-type	description	OID
-C	countryName	2.5.4.6
-CN	commonName	2.5.4.3
-DC	domainComponent	0.9.2342.19200300.100.1.25
-E	emailAddress (deprecated)	1.2.840.113549.1.9.1
-G or GN	givenName	2.5.4.42
-L	localityName	2.5.4.7
-O	organizationName	2.5.4.10
-OU	organizationalUnit	2.5.4.11
-SERIALNUMBER	serialNumber	2.5.4.5
-SN	surname	2.5.4.4
-ST or S	stateOrProvinceName	2.5.4.8
-STREET	streetAddress	2.5.4.9
-T or TITLE	title	2.5.4.12
-UID	userID	0.9.2342.19200300.100.1.1
-
 Parsing is according to the RFC 1779, though probably we will have deviate from it in the real world
 Experience will tell ;-)
 */
@@ -424,4 +412,157 @@ func ParseDistinguishedName(data string) (attr []*Attribute, err error){
 	}
 
 	return res, nil
+}
+
+/*
+type	description	OID
+C	countryName	2.5.4.6
+CN	commonName	2.5.4.3
+DC	domainComponent	0.9.2342.19200300.100.1.25
+E	emailAddress (deprecated)	1.2.840.113549.1.9.1
+G or GN	givenName	2.5.4.42
+L	localityName	2.5.4.7
+O	organizationName	2.5.4.10
+OU	organizationalUnit	2.5.4.11
+SERIALNUMBER	serialNumber	2.5.4.5
+SN	surname	2.5.4.4
+ST or S	stateOrProvinceName	2.5.4.8
+STREET	streetAddress	2.5.4.9
+T or TITLE	title	2.5.4.12
+UID	userID	0.9.2342.19200300.100.1.1
+*/
+var DC = asn1.ObjectIdentifier { 0, 9, 2342, 19200300, 100, 1, 25 }
+var EMAIL = asn1.ObjectIdentifier { 1, 2, 840, 113549, 1, 9, 1 }
+var GN = asn1.ObjectIdentifier { 2, 5, 4, 42 }
+var SN = asn1.ObjectIdentifier { 2, 5, 4, 4 }
+var ST = asn1.ObjectIdentifier { 2, 5, 4, 8 }
+var TITLE = asn1.ObjectIdentifier { 2, 5, 4, 12 }
+var UID = asn1.ObjectIdentifier { 0, 9, 2342, 19200300, 100, 1, 1 }
+
+func convertStringToOID(oid string) (o asn1.ObjectIdentifier, e error) {
+	res := []int{}
+
+	if (strings.ToUpper(oid[0:4]) != "OID.") {
+		return nil, errors.New("invalid oid string")
+	}
+	numbers :=  strings.Split(oid[4:], ".")
+	for i:=0; i<len(numbers); i++ {
+		nbr, err := strconv.Atoi(numbers[i])
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, nbr)
+	}
+
+	return res, nil
+}
+
+// TODO: Refactor the function
+func ConvertDNToPKIXName(dn string) (p *pkix.Name, e error) {
+	attrs, err := ParseDistinguishedName(dn)
+
+	if err != nil {
+		log.Fatal("Unable to convert Distinguished Name: " + err.Error())
+		return nil, err
+	}
+
+	pkixName := pkix.Name{}
+	for i := 0; i < len(attrs); i++ {
+		if strings.ToUpper(attrs[i].key) == "C" {
+			pkixName.Country = append(pkixName.Country, attrs[i].value)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "CN" {
+			pkixName.CommonName = attrs[i].value
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "DC" {
+			pkixAttr := pkix.AttributeTypeAndValue{
+				Type:  DC,
+				Value: attrs[i].value,
+			}
+			pkixName.Names = append(pkixName.Names, pkixAttr)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "E" {
+			pkixAttr := pkix.AttributeTypeAndValue{
+				Type:  EMAIL,
+				Value: attrs[i].value,
+			}
+			pkixName.Names = append(pkixName.Names, pkixAttr)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "GN" ||
+			strings.ToUpper(attrs[i].key) == "G" {
+			pkixAttr := pkix.AttributeTypeAndValue{
+				Type:  GN,
+				Value: attrs[i].value,
+			}
+			pkixName.Names = append(pkixName.Names, pkixAttr)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "L" {
+			pkixName.Locality = append(pkixName.Locality, attrs[i].value)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "O" {
+			pkixName.Organization = append(pkixName.Organization, attrs[i].value)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "OU" {
+			pkixName.OrganizationalUnit = append(pkixName.OrganizationalUnit, attrs[i].value)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "SERIALNUMBER" {
+			pkixName.SerialNumber = attrs[i].value
+		}
+		if strings.ToUpper(attrs[i].key) == "SN" {
+			pkixAttr := pkix.AttributeTypeAndValue{
+				Type:  SN,
+				Value: attrs[i].value,
+			}
+			pkixName.Names = append(pkixName.Names, pkixAttr)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "ST" {
+			pkixAttr := pkix.AttributeTypeAndValue{
+				Type:  ST,
+				Value: attrs[i].value,
+			}
+			pkixName.Names = append(pkixName.Names, pkixAttr)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "STREET" {
+			pkixName.StreetAddress = append(pkixName.StreetAddress, attrs[i].value)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "T" ||
+			strings.ToUpper(attrs[i].key) == "TITLE" {
+			pkixAttr := pkix.AttributeTypeAndValue{
+				Type:  TITLE,
+				Value: attrs[i].value,
+			}
+			pkixName.Names = append(pkixName.Names, pkixAttr)
+			continue
+		}
+		if strings.ToUpper(attrs[i].key) == "UID" {
+			pkixAttr := pkix.AttributeTypeAndValue{
+				Type:  UID,
+				Value: attrs[i].value,
+			}
+			pkixName.Names = append(pkixName.Names, pkixAttr)
+			continue
+		}
+		oid, err := convertStringToOID(attrs[i].key)
+		if err != nil {
+			return nil, err
+		}
+		pkixAttr := pkix.AttributeTypeAndValue{
+			Type:  oid,
+			Value: attrs[i].value,
+		}
+		pkixName.Names = append(pkixName.Names, pkixAttr)
+	}
+
+	return &pkixName, nil
 }
