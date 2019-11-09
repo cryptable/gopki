@@ -1,4 +1,4 @@
-package gopki
+package ca
 
 import (
 	"encoding/asn1"

@@ -1,4 +1,4 @@
-package gopki
+package utils
 
 import (
 	"bytes"
@@ -233,7 +233,7 @@ func TestStoreRSAPrivateKeyPem(t *testing.T) {
 	}
 
 	// Store file to test with openssl
-	w, err := os.Create("./testing/encryptedRSAKey.pem")
+	w, err := os.Create("../testing/encryptedRSAKey.pem")
 	defer w.Close()
 	if err != nil {
 		t.Error("Create file failed: " + err.Error())

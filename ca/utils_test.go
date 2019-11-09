@@ -1,4 +1,4 @@
-package gopki
+package ca
 
 import (
 	"crypto"

@@ -1,23 +1,84 @@
-package gopki
+package ca
 
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
+	"gopki/utils"
 	"math/big"
 	"os"
 	"strings"
 	"testing"
 )
 
+type MockStorage struct {
+	mockCA *CA
+}
+// ---------- mockDB ----------
+func NewMockDB() (*MockStorage) {
+	db := new(MockStorage)
+	return db
+}
+
+func (db *MockStorage) GetCA() (*CA, error) {
+	return db.mockCA, nil
+}
+
+func (db *MockStorage) StoreCA(ca *CA) error {
+	db.mockCA = ca
+	return nil
+}
+
+func (db *MockStorage) GetNextSerialNumber() (*big.Int, error) {
+	db.mockCA.certificateSerialNumber = db.mockCA.certificateSerialNumber.Add(db.mockCA.certificateSerialNumber, big.NewInt(1))
+	return db.mockCA.certificateSerialNumber, nil
+}
+
 // ---------- Testing Module ----------
+
+func TestCreateCA(t *testing.T) {
+	// Arrange
+	rnd := rand.Reader
+	rsaKey, err := rsa.GenerateKey(rnd, 4096)
+	storage := NewMockDB()
+
+	// Act
+ca, err := CreateCA(storage,"CN=GoPKI,O=Cryptable,C=BE", 10, rsaKey.Public(), rsaKey)
+	if err != nil {
+		t.Error("CreateCA() Failed", err)
+		return
+	}
+
+	// Assert
+	if (ca.Bytes == nil) {
+		t.Error("empty ca.Bytes array")
+	}
+
+	if (ca.Certificate == nil) {
+		t.Error("empty ca.Certificate")
+	}
+
+	if (ca.priv == nil) {
+		t.Error("empty ca.priv")
+	}
+
+	if ca.certificateSerialNumber.Cmp(big.NewInt(2)) != 0 {
+		t.Error("Serial number is not 1: ", ca.certificateSerialNumber)
+	}
+}
 
 func TestNewCA(t *testing.T) {
 	// Arrange
 	rnd := rand.Reader
 	rsaKey, err := rsa.GenerateKey(rnd, 4096)
+	storage := NewMockDB()
+	testca, err := CreateCA(storage,"CN=GoPKI,O=Cryptable,C=BE", 10, rsaKey.Public(), rsaKey)
+	if err != nil {
+		t.Error("CreateCA() Failed", err)
+		return
+	}
 
-	// Act
-	ca, err := NewCA("CN=GoPKI,O=Cryptable,C=BE", 10, rsaKey.Public(), rsaKey)
+	ca, err := NewCA(storage, testca.Bytes, testca.priv, testca.certificateSerialNumber)
 	if err != nil {
 		t.Error("NewCA() Failed", err)
 		return
@@ -36,9 +97,28 @@ func TestNewCA(t *testing.T) {
 		t.Error("empty ca.priv")
 	}
 
-	if ca.certificateSerialNumber.Cmp(big.NewInt(1)) != 0 {
+	if ca.certificateSerialNumber.Cmp(big.NewInt(2)) != 0 {
 		t.Error("Serial number is not 1: ", ca.certificateSerialNumber)
 	}
+}
+
+func TestNewCAFailure(t *testing.T) {
+	// Arrange
+	rnd := rand.Reader
+	rsaKey, err := rsa.GenerateKey(rnd, 4096)
+	storage := NewMockDB()
+	testca, err := CreateCA(storage,"CN=GoPKI,O=Cryptable,C=BE", 10, rsaKey.Public(), rsaKey)
+	if err != nil {
+		t.Error("NewCA() Failed", err)
+		return
+	}
+
+	_, err = NewCA(storage, []byte("garbage"), testca.priv, testca.certificateSerialNumber)
+	if err == nil {
+		t.Error("CreateCA() success is a failure")
+		return
+	}
+
 }
 
 // ---------- Testing Certificates ----------
@@ -54,8 +134,9 @@ func setup(t *testing.T) {
 	// Create a Test CA
 	rnd := rand.Reader
 	rsaKey, err := rsa.GenerateKey(rnd, 4096)
+	storage := NewMockDB()
 
-	ca, err := NewCA("CN=GoPKI,O=Cryptable,C=BE", 10, rsaKey.Public(), rsaKey)
+	ca, err := CreateCA(storage,"CN=GoPKI,O=Cryptable,C=BE", 10, rsaKey.Public(), rsaKey)
 	if err != nil {
 		t.Error("NewCA() Failed", err)
 		panic(err)
@@ -63,19 +144,21 @@ func setup(t *testing.T) {
 
 	// Write the CA for external validation
 	// Create directory if not exists
-	os.Mkdir("./testing", os.ModePerm)
+	os.Mkdir("../testing", os.ModePerm)
 
-	err = storeCertificate(ca.Bytes, "./testing/ca.pem")
+	err = storeCertificate(ca.Bytes, "../testing/ca.pem")
 	if err != nil {
 		t.Error("store certificate failed :", err)
 		return
 	}
 
-	err = storePrivateKey(ca.priv, "./testing/ca_key.pem")
+	err = storePrivateKey(ca.priv, "../testing/ca_key.pem")
 	if err != nil {
 		t.Error("store certificate failed :", err)
 		return
 	}
+
+	ca.storage.StoreCA(ca)
 
 	setupCA = ca
 }
@@ -105,11 +188,11 @@ func TestCA_CreateTLSClientCertificate(t *testing.T) {
 		return
 	}
 
-	err = storeCertificate(cert, "./testing/tlsclient.pem")
+	err = storeCertificate(cert, "../testing/tlsclient.pem")
 	if err != nil {
 		t.Error("store certificate failed: ", err)
 	}
-	err = storePrivateKey(rsaKey, "./testing/tlsclient_key.pem")
+	err = storePrivateKey(rsaKey, "../testing/tlsclient_key.pem")
 	if err != nil {
 		t.Error("store private key failed: ", err)
 	}
@@ -136,11 +219,11 @@ func TestCA_CreateTLSServerCertificate(t *testing.T) {
 		return
 	}
 
-	err = storeCertificate(cert, "./testing/tlsserver.pem")
+	err = storeCertificate(cert, "../testing/tlsserver.pem")
 	if err != nil {
 		t.Error("store certificate failed: ", err)
 	}
-	err = storePrivateKey(rsaKey, "./testing/tlsserver_key.pem")
+	err = storePrivateKey(rsaKey, "../testing/tlsserver_key.pem")
 	if err != nil {
 		t.Error("store private key failed: ", err)
 	}
@@ -230,11 +313,14 @@ ndxpptqmtMpXlv4CvEVouw1dD6ag7lTLpNja3F6eDIzcNCi8ulsMA8jgFn0las2q
 j6D1pJp1jVVYmDXGDGGegW9LKDVEzk8=
 -----END PRIVATE KEY-----`
 	serialNumber := big.NewInt(100)
-	cert, _ := LoadCertificate(strings.NewReader(cacert))
-	priv, _ := LoadPrivateKeyPem(strings.NewReader(caprivate), nil)
+	cert, _ := utils.LoadCertificate(strings.NewReader(cacert))
+	certificate, _ := x509.ParseCertificate(cert)
+	priv, _ := utils.LoadPrivateKeyPem(strings.NewReader(caprivate), nil)
+	storage := NewMockDB()
+	storage.StoreCA(&CA{priv, cert, certificate, serialNumber, storage})
 
 	// Act
-	ca, err := LoadCA(cert, priv, *serialNumber)
+	ca, err := LoadCA(storage)
 
 	// Assert
 	if err != nil {
@@ -245,6 +331,33 @@ j6D1pJp1jVVYmDXGDGGegW9LKDVEzk8=
 	_, err = ca.CreateTLSClientCertificate("CN=Test", tlskeys.Public())
 	if err != nil {
 		t.Error("LoadCA failed: " + err.Error())
+		return
+	}
+}
+
+func TestCA_GetPrivateData(t *testing.T) {
+	// Arrange
+	setup(t)
+	defer teardown(t)
+
+	// Act
+	priv, sn, err := setupCA.GetPrivateData([]byte("test"))
+
+	// Assert
+	if err != nil {
+		t.Error("GetPrivateData failed: " + err.Error())
+		return
+	}
+
+	sernum := new(big.Int)
+	sernum = sernum.SetBytes(sn)
+	if sernum.Cmp(setupCA.certificateSerialNumber) != 0 {
+		t.Error("Sernum not equal: " + sernum.String())
+		return
+	}
+	_, err = utils.LoadPrivateKeyPem(strings.NewReader(priv), []byte("test"))
+	if err != nil {
+		t.Error("LoadPrivateKeyPem failed: " + err.Error())
 		return
 	}
 }

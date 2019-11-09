@@ -1,4 +1,4 @@
-package gopki
+package utils
 
 import (
 	"crypto"

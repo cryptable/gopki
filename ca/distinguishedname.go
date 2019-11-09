@@ -1,4 +1,4 @@
-package gopki
+package ca
 
 import (
 	"crypto/x509/pkix"

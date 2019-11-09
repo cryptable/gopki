@@ -1,1 +1,5 @@
 package gopki
+
+func main() {
+
+}
