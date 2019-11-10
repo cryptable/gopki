@@ -25,7 +25,7 @@ func NewMySQLDB(dataSource string, integrity []byte, confidentiality []byte) (*M
 	return &MySQLdb{db, integrity, confidentiality}, nil
 }
 
-var createDB = `CREATE TABLE IF NOT EXISTS CA (caname VARCHAR(64) PRIMARY KEY, certificate BLOB, privatekey TEXT, serialnumber TINYBLOB);`
+var createMySQLDB = `CREATE TABLE IF NOT EXISTS CA (caname VARCHAR(64) PRIMARY KEY, certificate BLOB, privatekey TEXT, serialnumber TINYBLOB);`
 
 func (my *MySQLdb)CreateDB() error {
 	_, err := my.db.Exec(createDB)

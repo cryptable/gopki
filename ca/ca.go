@@ -11,6 +11,7 @@ import (
 )
 
 type CA struct {
+	CAId int64
 	priv crypto.PrivateKey
 	Bytes []byte
 	Certificate *x509.Certificate
@@ -18,13 +19,13 @@ type CA struct {
 	storage CAStorage
 }
 
-func NewCA(storage CAStorage, cert []byte , priv crypto.PrivateKey, serialNum *big.Int) (c *CA, e error) {
+func NewCA(caid int64, storage CAStorage, cert []byte , priv crypto.PrivateKey, serialNum *big.Int) (c *CA, e error) {
 	certif, err := x509.ParseCertificate(cert)
 	if err != nil {
 		return nil, err
 	}
 
-	return &CA{priv, cert, certif, serialNum, storage }, nil
+	return &CA{caid, priv, cert, certif, serialNum, storage }, nil
 }
 
 func CreateCA(storage CAStorage, dn string, years int, pub crypto.PublicKey, priv crypto.PrivateKey) (c *CA, e error) {
@@ -48,8 +49,9 @@ func CreateCA(storage CAStorage, dn string, years int, pub crypto.PublicKey, pri
 	if err != nil {
 		return nil, err
 	}
+	tmpca, _ := NewCA(0, storage, cert, priv, big.NewInt(2))
 
-	return NewCA(storage, cert, priv, big.NewInt(2))
+	return storage.StoreCA(*tmpca)
 }
 
 func LoadCA(storage CAStorage) (c *CA, e error) {

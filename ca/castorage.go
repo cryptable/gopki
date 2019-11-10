@@ -6,6 +6,6 @@ import "math/big"
 // CA name given during new CA
 type CAStorage interface {
 	GetCA() (*CA, error)
-	StoreCA(ca *CA) error
+	StoreCA(ca CA) (*CA, error)
 	GetNextSerialNumber() (*big.Int, error)
 }
