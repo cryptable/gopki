@@ -24,9 +24,9 @@ func (db *MockStorage) GetCA() (*CA, error) {
 	return db.mockCA, nil
 }
 
-func (db *MockStorage) StoreCA(ca *CA) error {
-	db.mockCA = ca
-	return nil
+func (db *MockStorage) StoreCA(ca CA) (*CA, error) {
+	db.mockCA = &ca
+	return db.mockCA, nil
 }
 
 func (db *MockStorage) GetNextSerialNumber() (*big.Int, error) {
@@ -78,7 +78,7 @@ func TestNewCA(t *testing.T) {
 		return
 	}
 
-	ca, err := NewCA(storage, testca.Bytes, testca.priv, testca.certificateSerialNumber)
+	ca, err := NewCA(0, storage, testca.Bytes, testca.priv, testca.certificateSerialNumber)
 	if err != nil {
 		t.Error("NewCA() Failed", err)
 		return
@@ -113,7 +113,7 @@ func TestNewCAFailure(t *testing.T) {
 		return
 	}
 
-	_, err = NewCA(storage, []byte("garbage"), testca.priv, testca.certificateSerialNumber)
+	_, err = NewCA(0, storage, []byte("garbage"), testca.priv, testca.certificateSerialNumber)
 	if err == nil {
 		t.Error("CreateCA() success is a failure")
 		return
@@ -158,7 +158,7 @@ func setup(t *testing.T) {
 		return
 	}
 
-	ca.storage.StoreCA(ca)
+	ca,err = ca.storage.StoreCA(*ca)
 
 	setupCA = ca
 }
@@ -317,7 +317,7 @@ j6D1pJp1jVVYmDXGDGGegW9LKDVEzk8=
 	certificate, _ := x509.ParseCertificate(cert)
 	priv, _ := utils.LoadPrivateKeyPem(strings.NewReader(caprivate), nil)
 	storage := NewMockDB()
-	storage.StoreCA(&CA{priv, cert, certificate, serialNumber, storage})
+	storage.StoreCA(CA{ 0,priv, cert, certificate, serialNumber, storage})
 
 	// Act
 	ca, err := LoadCA(storage)
